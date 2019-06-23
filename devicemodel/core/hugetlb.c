@@ -775,7 +775,7 @@ int hugetlb_setup_memory(struct vmctx *ctx)
 	if (ctx->biosmem > 0) {
 		if (vm_map_memseg_vma(ctx, ctx->biosmem, 4 * GB - ctx->biosmem,
 			(uint64_t)(ctx->baseaddr + 4 * GB - ctx->biosmem),
-			PROT_READ | PROT_EXEC) < 0)
+			PROT_ALL) < 0)
 		goto err;
 	}
 
