@@ -39,6 +39,7 @@
  */
 #define	VMMAPI_VERSION	0103	/* 2 digit major followed by 2 digit minor */
 
+#define	KB	(1024UL)
 #define	MB	(1024 * 1024UL)
 #define	GB	(1024 * 1024 * 1024UL)
 

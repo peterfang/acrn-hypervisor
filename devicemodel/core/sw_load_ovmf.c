@@ -28,6 +28,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <assert.h>
 
 #include "dm.h"
 #include "vmmapi.h"
@@ -71,19 +72,79 @@ ovmf_image_size(void)
 int
 acrn_parse_ovmf(char *arg)
 {
-	int error = -1;
+	int error;
+	char *str, *token = NULL;
 	size_t len = strnlen(arg, STR_LEN);
 
+	str = strdup(arg);
 	if (len < STR_LEN) {
-		strncpy(ovmf_path, arg, len + 1);
-		if (check_image(ovmf_path, 2 * MB, &ovmf_size) == 0) {
-			ovmf_file_name = ovmf_path;
-			printf("SW_LOAD: get ovmf path %s, size 0x%lx\n",
-						ovmf_path, ovmf_size);
-			error = 0;
+		token = strsep(&str, ",");
+		while (token != NULL) {
+			if (*token == 'w') {
+				is_writemode = true;
+			} else if (strstr(token,".fd")) {
+				len = strnlen(token, STR_LEN);
+				strncpy(ovmf_path, token, len + 1);
+			}
+			else {
+				printf("SW_LOAD: unsupported OVMF argument %s\n", token);
+				return -1;
+			}
+			token = strsep(&str, ",");
 		}
+
+		error = check_image(ovmf_path, 2 * MB, &ovmf_size);
+		assert(!error);
+
+		ovmf_file_name = ovmf_path;
+		printf("SW_LOAD: get ovmf path %s, size 0x%lx\n",
+		       ovmf_path, ovmf_size);
+		return 0;
+	} else
+		return -1;
+}
+
+int
+acrn_writeback_ovmf(struct vmctx *ctx)
+{
+	FILE *fp;
+	size_t write;
+	size_t ovmf_vars_size = 128 * KB;
+
+	fp = fopen(ovmf_path, "r+");
+	if (fp == NULL) {
+		fprintf(stderr,
+				"OVMF_WRITEBACK ERR: could not open ovmf file: %s\n",
+				ovmf_path);
+		return -1;
 	}
-	return error;
+
+	fseek(fp, 0, SEEK_END);
+
+	if (ftell(fp) != ovmf_size) {
+		fprintf(stderr,
+				"SW_LOAD ERR: ovmf file changed\n");
+		fclose(fp);
+		return -1;
+	}
+
+	fseek(fp, 0, SEEK_SET);
+	write = fwrite(ctx->baseaddr + OVMF_TOP(ctx) - ovmf_size,
+			sizeof(char), ovmf_vars_size, fp);
+
+	if (write < ovmf_vars_size) {
+		fprintf(stderr,
+				"OVMF_WRITEBACK ERR: could not write back OVMF\n");
+		fclose(fp);
+		return -1;
+	}
+
+	fclose(fp);
+	printf("OVMF_WRITEBACK: OVMF have been written back \
+			to partition blob %s size %lu from guest 0x%lx\n",
+			ovmf_path, ovmf_vars_size, OVMF_TOP(ctx) - ovmf_size);
+
+	return 0;
 }
 
 static int
@@ -123,7 +184,6 @@ acrn_prepare_ovmf(struct vmctx *ctx)
 	fclose(fp);
 	printf("SW_LOAD: partition blob %s size %lu copy to guest 0x%lx\n",
 		ovmf_path, ovmf_size, OVMF_TOP(ctx) - ovmf_size);
-
 	return 0;
 }
 

@@ -88,6 +88,7 @@ bool stdio_in_use;
 bool lapic_pt;
 bool is_rtvm;
 bool skip_pci_mem64bar_workaround = false;
+bool is_writemode;
 
 static int virtio_msix = 1;
 static bool debugexit_enabled;
@@ -558,6 +559,9 @@ vm_reset_vdevs(struct vmctx *ctx)
 	deinit_pci(ctx);
 	pci_irq_deinit(ctx);
 	ioapic_deinit();
+
+	if (is_writemode == true)
+		acrn_writeback_ovmf(ctx);
 
 	pci_irq_init(ctx);
 	atkbdc_init(ctx);
@@ -1052,6 +1056,9 @@ main(int argc, char *argv[])
 
 		vm_pause(ctx);
 		delete_cpu(ctx, BSP);
+
+		if (is_writemode == true)
+			acrn_writeback_ovmf(ctx);
 
 		if (vm_get_suspend_mode() != VM_SUSPEND_FULL_RESET){
 			ret = 0;
