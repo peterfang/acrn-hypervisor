@@ -883,7 +883,7 @@ main(int argc, char *argv[])
 		case CMD_OPT_OVMF:
 			if (!vsbl_file_name && acrn_parse_ovmf(optarg) != 0)
 				errx(EX_USAGE, "invalid ovmf param %s", optarg);
-			skip_pci_mem64bar_workaround = true;
+			//skip_pci_mem64bar_workaround = true;
 			break;
 		case CMD_OPT_PART_INFO:
 			if (acrn_parse_guest_part_info(optarg) != 0) {
