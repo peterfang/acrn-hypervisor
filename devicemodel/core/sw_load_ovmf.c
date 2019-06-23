@@ -29,6 +29,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <err.h>
+#include <sysexits.h>
 
 #include "dm.h"
 #include "vmmapi.h"
@@ -212,6 +214,25 @@ acrn_sw_load_ovmf(struct vmctx *ctx)
 
 	strncpy(e820->signature, "820", sizeof(e820->signature));
 	e820->nentries = acrn_create_e820_table(ctx, e820->map);
+
+	if (trusty_enabled) {
+		if (e820->map[e820->nentries - 1].baseaddr +
+		    e820->map[e820->nentries - 1].length >= 511 * GB) {
+			errx(EX_USAGE,
+				"guest memory configuration overlaps with Trusty memory");
+		}
+
+		/* use type unusable for Trusty memory */
+		e820->map[e820->nentries].baseaddr = 511 * GB;
+		e820->map[e820->nentries].length = 1 * GB;
+		e820->map[e820->nentries].type = E820_TYPE_UNUSABLE;
+
+		printf("SW_LOAD: Trusty memory [0x%016lx, 0x%016lx) added to e820\n",
+			e820->map[e820->nentries].baseaddr,
+			e820->map[e820->nentries].baseaddr +
+			e820->map[e820->nentries].length);
+		e820->nentries++;
+	}
 
 	printf("SW_LOAD: ovmf_entry 0x%lx\n", OVMF_TOP(ctx) - 16);
 
