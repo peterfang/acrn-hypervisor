@@ -237,6 +237,10 @@ static void complete_ioreq(struct acrn_vcpu *vcpu, struct io_request *io_req)
 		switch (vcpu->req.io_type) {
 		case REQ_PORTIO:
 			if (io_req->reqs.pio.direction == REQUEST_READ) {
+				/*
+				 * A REQ_PORTIO VHM request on 0xcf8 & 0xcfc may switch
+				 * to REQ_PCICFG in some cases.
+				 */
 				io_req->reqs.pio.value = (vhm_req->type == REQ_PORTIO) ?
 					vhm_req->reqs.pio.value :
 					(uint32_t)vhm_req->reqs.pci.value;
@@ -245,6 +249,10 @@ static void complete_ioreq(struct acrn_vcpu *vcpu, struct io_request *io_req)
 
 		case REQ_MMIO:
 			if (io_req->reqs.mmio.direction == REQUEST_READ) {
+				/*
+				 * A REQ_MMIO VHM request on PCI MMCONFIG switches to
+				 * REQ_PCICFG.
+				 */
 				io_req->reqs.mmio.value = (vhm_req->type == REQ_MMIO) ?
 					vhm_req->reqs.mmio.value :
 					(uint64_t)vhm_req->reqs.pci.value;
@@ -252,7 +260,7 @@ static void complete_ioreq(struct acrn_vcpu *vcpu, struct io_request *io_req)
 			break;
 
 		default:
-			/*no actions are required for other cases.*/
+			/* No actions are required for other cases. */
 			break;
 		}
 	}
@@ -316,23 +324,14 @@ static void dm_emulate_io_complete(struct acrn_vcpu *vcpu)
 		if (vcpu->state == VCPU_ZOMBIE) {
 			complete_ioreq(vcpu, NULL);
 		} else {
+			/* Post-work is mainly interested in the read value */
 			switch (vcpu->req.io_type) {
-			case REQ_MMIO:
-				/*
-				 * A REQ_MMIO VHM request on PCI MMCONFIG switches to
-				 * REQ_PCICFG. Post-work is mainly interested in the read
-				 * value.
-				 */
-				dm_emulate_mmio_complete(vcpu);
+			case REQ_PORTIO:
+				dm_emulate_pio_complete(vcpu);
 				break;
 
-			case REQ_PORTIO:
-				/*
-				 * A REQ_PORTIO VHM request on 0xcf8 & 0xcfc may switch to
-				 * REQ_PCICFG in some cases. Post-work is mainly interested
-				 * in the read value.
-				 */
-				dm_emulate_pio_complete(vcpu);
+			case REQ_MMIO:
+				dm_emulate_mmio_complete(vcpu);
 				break;
 
 			case REQ_PCICFG:
