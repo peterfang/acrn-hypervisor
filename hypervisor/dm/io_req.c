@@ -232,14 +232,23 @@ static void complete_ioreq(struct acrn_vcpu *vcpu, struct io_request *io_req)
 
 	stac();
 	vhm_req = &req_buf->req_queue[vcpu->vcpu_id];
+
 	if (io_req != NULL) {
 		switch (vcpu->req.io_type) {
 		case REQ_PORTIO:
-			io_req->reqs.pio.value = vhm_req->reqs.pio.value;
+			if (io_req->reqs.pio.direction == REQUEST_READ) {
+				io_req->reqs.pio.value = (vhm_req->type == REQ_PORTIO) ?
+					vhm_req->reqs.pio.value :
+					(uint32_t)vhm_req->reqs.pci.value;
+			}
 			break;
 
 		case REQ_MMIO:
-			io_req->reqs.mmio.value = vhm_req->reqs.mmio.value;
+			if (io_req->reqs.mmio.direction == REQUEST_READ) {
+				io_req->reqs.mmio.value = (vhm_req->type == REQ_MMIO) ?
+					vhm_req->reqs.mmio.value :
+					(uint64_t)vhm_req->reqs.pci.value;
+			}
 			break;
 
 		default:
@@ -309,21 +318,27 @@ static void dm_emulate_io_complete(struct acrn_vcpu *vcpu)
 		} else {
 			switch (vcpu->req.io_type) {
 			case REQ_MMIO:
+				/*
+				 * A REQ_MMIO VHM request on PCI MMCONFIG switches to
+				 * REQ_PCICFG. Post-work is mainly interested in the read
+				 * value.
+				 */
 				dm_emulate_mmio_complete(vcpu);
 				break;
 
 			case REQ_PORTIO:
-			case REQ_PCICFG:
 				/*
-				 * REQ_PORTIO on 0xcf8 & 0xcfc may switch to REQ_PCICFG in some
-				 * cases. It works to apply the post-work for REQ_PORTIO on
-				 * REQ_PCICFG because the format of the first 28 bytes of
-				 * REQ_PORTIO & REQ_PCICFG requests are exactly the same and
-				 * post-work is mainly interested in the read value.
+				 * A REQ_PORTIO VHM request on 0xcf8 & 0xcfc may switch to
+				 * REQ_PCICFG in some cases. Post-work is mainly interested
+				 * in the read value.
 				 */
 				dm_emulate_pio_complete(vcpu);
 				break;
 
+			case REQ_PCICFG:
+				pr_err("%s: unexpected io_type %d in ioreq(%u)",
+						__func__, vcpu->req.io_type, vcpu->vcpu_id);
+				/* falls through */
 			default:
 				/*
 				 * REQ_WP can only be triggered on writes which do not need
