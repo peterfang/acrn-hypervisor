@@ -1695,8 +1695,9 @@ static int32_t vmm_emulate_instruction(struct acrn_vcpu *vcpu)
 
 static int32_t vie_init(struct instr_emul_vie *vie, struct acrn_vcpu *vcpu)
 {
-	uint64_t guest_rip_gva = vcpu_get_rip(vcpu);
 	uint32_t inst_len = vcpu->arch.inst_len;
+	enum vm_cpu_mode cpu_mode;
+	uint64_t guest_rip_gva;
 	uint32_t err_code;
 	uint64_t fault_addr;
 	int32_t ret;
@@ -1711,6 +1712,10 @@ static int32_t vie_init(struct instr_emul_vie *vie, struct acrn_vcpu *vcpu)
 		vie->base_register = CPU_REG_LAST;
 		vie->index_register = CPU_REG_LAST;
 		vie->segment_register = CPU_REG_LAST;
+
+		cpu_mode = get_vcpu_mode(vcpu);
+		vie_calculate_gla(cpu_mode, CPU_REG_CS, NULL, vcpu_get_rip(vcpu),
+				(cpu_mode == CPU_MODE_64BIT) ? 8U : 4U, &guest_rip_gva);
 
 		err_code = PAGE_FAULT_ID_FLAG;
 		ret = copy_from_gva(vcpu, vie->inst, guest_rip_gva, inst_len, &err_code, &fault_addr);
@@ -2353,6 +2358,7 @@ int32_t decode_instruction(struct acrn_vcpu *vcpu)
 
 	emul_ctxt = &vcpu->inst_ctxt;
 	retval = vie_init(&emul_ctxt->vie, vcpu);
+
 	if (retval < 0) {
 		if (retval != -EFAULT) {
 			pr_err("init vie failed @ 0x%016llx:", vcpu_get_rip(vcpu));
