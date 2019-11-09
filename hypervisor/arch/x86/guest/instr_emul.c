@@ -560,14 +560,13 @@ static bool is_desc_valid(const struct seg_desc *desc, uint32_t prot)
  *@pre prot must be PROT_READ or PROT_WRITE
  */
 static void vie_calculate_gla(enum vm_cpu_mode cpu_mode, enum cpu_reg_name seg,
-	const struct seg_desc *desc, uint64_t offset_arg, uint8_t addrsize, uint64_t *gla)
+	const struct seg_desc *desc, uint64_t offset, uint8_t addrsize, uint64_t *gla)
 {
 	uint64_t firstoff, segbase;
-	uint64_t offset = offset_arg;
 	uint8_t glasize;
 
 	firstoff = offset;
-	glasize = (cpu_mode == CPU_MODE_64BIT) ? 8U: 4U;
+	glasize = (cpu_mode == CPU_MODE_64BIT) ? 8U : 4U;
 
 	/*
 	 * In 64-bit mode all segments except %fs and %gs have a segment
@@ -1697,6 +1696,7 @@ static int32_t vie_init(struct instr_emul_vie *vie, struct acrn_vcpu *vcpu)
 {
 	uint32_t inst_len = vcpu->arch.inst_len;
 	enum vm_cpu_mode cpu_mode;
+	struct seg_desc desc;
 	uint64_t guest_rip_gva;
 	uint32_t err_code;
 	uint64_t fault_addr;
@@ -1714,8 +1714,11 @@ static int32_t vie_init(struct instr_emul_vie *vie, struct acrn_vcpu *vcpu)
 		vie->segment_register = CPU_REG_LAST;
 
 		cpu_mode = get_vcpu_mode(vcpu);
-		vie_calculate_gla(cpu_mode, CPU_REG_CS, NULL, vcpu_get_rip(vcpu),
-				(cpu_mode == CPU_MODE_64BIT) ? 8U : 4U, &guest_rip_gva);
+		vm_get_seg_desc(CPU_REG_CS, &desc);
+
+		/* VMX_GUEST_RIP is a natural-width field */
+		vie_calculate_gla(cpu_mode, CPU_REG_CS, &desc, vcpu_get_rip(vcpu),
+				8U, &guest_rip_gva);
 
 		err_code = PAGE_FAULT_ID_FLAG;
 		ret = copy_from_gva(vcpu, vie->inst, guest_rip_gva, inst_len, &err_code, &fault_addr);
@@ -2364,7 +2367,6 @@ int32_t decode_instruction(struct acrn_vcpu *vcpu)
 			pr_err("init vie failed @ 0x%016llx:", vcpu_get_rip(vcpu));
 		}
 	} else {
-
 		csar = exec_vmread32(VMX_GUEST_CS_ATTR);
 		cpu_mode = get_vcpu_mode(vcpu);
 
