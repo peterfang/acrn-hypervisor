@@ -427,7 +427,14 @@ def main(args):
                 if pcpu_id is not None and pcpu_id.text.strip() in pcpu_list:
                     dict_vcpu_list[vm_id].append(pcpu_id)
 
+    kern_args = common.get_leaf_tag_map(scenario, "os_config", "bootargs")
     for vm_id, passthru_devices in dict_passthru_devices.items():
+        if kern_args[int(vm_id)].find('reboot=acpi') == -1:
+            emsg = "you need to specify 'reboot=acpi' in scenario file's bootargs for VM{}".format(vm_id)
+            print(emsg)
+            err_dic['vm,bootargs'] = emsg
+            break
+
         print('start to generate ACPI ASL code for VM{}'.format(vm_id))
         dest_vm_acpi_path = os.path.join(DEST_ACPI_PATH, 'VM'+vm_id)
         if not os.path.isdir(dest_vm_acpi_path):
